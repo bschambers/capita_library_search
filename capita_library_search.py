@@ -1,3 +1,5 @@
+# Copyright 2019-present, B. S. Chambers --- Distributed under GPL version 3
+
 """Gets information from CapitaDiscovery Library Management System websites via
 web-scraping with BeautifulSoup.
 
