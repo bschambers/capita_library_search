@@ -1,0 +1,98 @@
+* Introduction
+
+Get search information from capitadiscovery based library catalogue websites by
+web-scraping with BeautifulSoup.
+
+A public librarian who I know compiled a series of lists of children's books on
+different themes as an aid to library users. Every book has been carefully
+checked using the online catalogue to make sure that this particular library
+authority has copies in stock.
+
+The problem which I am trying to solve is to make these lists more
+maintainable. The lists need to be maintained because library stock is in
+constant flux - items are withdrawn from stock if they are lost, damaged etc,
+and new items are added all the time. Periodically doing manual catalogue checks
+on hundreds of items is not at all practical in modern public libraries, where
+staffing levels are generally at the bare minimum.
+
+A fairly sizeable selection of UK public library authorities use the Capita LMS
+(Library Management System) and have a capitadiscovery based catalogue
+website. See below for a list of websites have been tested.
+
+* Usage
+** Command Line
+
+This is how you can do a single author and title search at the command line:
+
+#+BEGIN_SRC shell
+$ python -i capita_library_search.py -t "diary of a nobody" -a grossmith -b islington
+#+END_SRC
+
+NOTE: Using -i option to enter into interactive python interpreter after running
+the script. This way the search-results object can be queried interactively
+after the search is done. If you want it to just print the results to the
+terminal and then quit, leave out the -i option.
+
+** TODO Batch Running
+- lists in file
+- use presentation document
+  - extract items from presentation document
+  - OR produce presentation document from lists
+
+* Which Library Authorities Will This Work With (lists updated December 2019)
+
+The following UK library authorities have been tested:
+
+London Boroughs:
+- haringey
+- barnet
+- bromley
+- islington
+- royalgreenwich
+- wandsworth
+- southwark
+
+Other:
+- bracknellforest
+- bradford
+- cornwall
+- dudley
+- eastlothian
+- fife
+- gloslibraries (gloucestershire)
+- hartlepool
+- herefordshire
+- lancashire
+- leeds
+- liverpool
+- moray
+- northtyneside
+- sandwell
+- solihull
+- stockton
+- swindon
+- walsall
+- wigan
+- wirral
+
+Partial success only (no availability info and very slow to retrieve):
+- lambeth
+- worcs (Worcestershire)
+
+These UK library authorities use SirsiDynix rather than capitadiscovery:
+- city of london
+- wcc (worcestershire county council)
+- gwynedd
+
+* Dependencies
+- Python 3
+- requests
+- BeautifulSoup (bs4)
+
+* Copyright and License
+
+Project website: https://github.com/bschambers/capita_library_search
+
+Copyright 2019-present, B. S. Chambers
+
+Released under the GPL, version 3
