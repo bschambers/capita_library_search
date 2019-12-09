@@ -1,14 +1,25 @@
-"""Gets information from online library catalogues using the CapitaDiscovery
-Library Management System.
+"""Gets information from CapitaDiscovery Library Management System websites via
+web-scraping with BeautifulSoup.
+
+
+
+USAGE:
+
+ $ python3 -i islington.py -t "stitch in time" -a "l'engle" -b islington
+
+NOTE: using -i option to enter into interactive python interpreter after running
+the script.
+
+
 
 At the time of writing, several UK library services use Capita.
 
 These have been tested:
-islington
-walsall
+- islington
+- walsall
 
 To be tested:
-worcs
+- worcs
 """
 
 from requests import get
@@ -56,22 +67,62 @@ def is_good_response(resp):
 
 class CatalogueItem(object):
     """A library catalogue item."""
-    pass
+
+    def __init__(self):
+        self.status = ''
+        self.barcode = 0
+        self.shelfmark = ''
+        self.item_type = ''
+
+    def is_available(self):
+        return self.status.lower() == 'available'
+
+    def to_string(self):
+        return 'status={} | barcode={} | shelfmark={} | type={}'.format(self.status,
+                                                                        self.barcode,
+                                                                        self.shelfmark,
+                                                                        self.item_type)
 
 class BranchResultItem(object):
     """A search results item's library branch detail."""
-    pass
+
+    def __init__(self):
+        self.name = ''
+        self.items = []
+
+    def add_item(self, cat_item):
+        "cat_item = a CatalogueItem"
+        self.items.append(cat_item)
+
+    def is_available(self):
+        for i in self.items:
+            if i.is_available():
+                return True
+        return False
+
+    def to_string(self):
+        available = ' (AVAILABLE)' if self.is_available() else ''
+        s = StringIO()
+        s.write('BRANCH: {}{}\n'.format(self.name, available))
+        for i in self.items:
+            s.write('... {}\n'.format(i.to_string()))
+        return s.getvalue()
 
 class SearchResultItem(object):
     """A search results item."""
 
-    item_id = 'default'
-    title = 'default'
-    publisher = 'default'
-    link = 'default'
-    summary = 'default'
-    available = 'default'
-    branches = []
+    def __init__(self):
+        self.item_id = 'default'
+        self.title = 'default'
+        self.publisher = 'default'
+        self.link = 'default'
+        self.summary = 'default'
+        self.available = 'default'
+        self.branches = []
+
+    def add_branch_result(self, bri):
+        "bri = a BranchResultItem"
+        self.branches.append(bri)
 
     def to_string(self):
         s = StringIO()
@@ -80,21 +131,22 @@ class SearchResultItem(object):
         s.write('PUBLISHER: {}\n'.format(self.publisher))
         s.write('LINK:      {}\n'.format(self.link))
         s.write('SUMMARY:   {}\n'.format(self.summary))
-        s.write('AVAILABLE: {}'.format(self.available))
+        s.write('AVAILABLE: {}\n'.format(self.available))
         for b in self.branches:
-            s.write('BRANCH: {}'.format(b))
+            s.write(b.to_string())
         return s.getvalue()
 
 class CapitaSearch(object):
-    """Get search results from Islington Library Catalogue."""
+    """Get search results from CapitaDiscovery Library Catalogue website."""
 
     capita_url = 'https://capitadiscovery.co.uk/'
-    borough_url = ''
-    search_url = ''
-    items_found = []
     default_borough = 'islington'
 
     def __init__(self, title='', author='', borough=''):
+
+        self.borough_url = ''
+        self.search_url = ''
+        self.items_found = []
 
         if not (title or author):
             log_error('IslingtonSearch: must supply title and/or author\n')
@@ -150,13 +202,62 @@ class CapitaSearch(object):
                 html = BeautifulSoup(simple_get(new_item.link), 'html.parser')
                 div_avail = html.select('div#availability')
                 if div_avail:
-                    div_status = div_avail[0].select('div.status')
-                    if div_status:
-                        p = div_status[0].select('p.branches')
-                        if p:
-                            new_item.available = p[0].text
+
+                    avail_status = div_avail[0].select('div.status')
+                    if avail_status:
+                        p_branches = avail_status[0].select('p.branches')
+                        if p_branches:
+                            new_item.available = p_branches[0].text
+
+                    ul_options = div_avail[0].select('ul.options')
+                    if ul_options:
+                        li_branches = ul_options[0].select('li')
+
+                        # print('\nLI_BRANCHES: {}\n'.format(li_branches))
+                        for li_branch in li_branches:
+                            bri = self.getBranchResultItem(li_branch)
+                            new_item.add_branch_result(bri)
 
                 self.items_found.append(new_item)
+
+    def getBranchResultItem(self, branch):
+
+        bri = BranchResultItem()
+
+        # <span itemprop="name">
+        name_span = branch.findAll('span', {"itemprop" : "name"})
+        if name_span:
+            bri.name = name_span[0].text
+
+            # <tbody> - table body contains the items
+            tbody = branch.select('tbody')
+            if tbody:
+                # each <tr> is a CatalogueItem
+                for row in tbody[0].select('tr'):
+                    citem = CatalogueItem()
+
+                    prop = row.findAll('span', {'itemprop' : 'serialNumber'})
+                    if prop:
+                        citem.barcode = prop[0].text
+
+                    prop = row.findAll('span', {'itemprop' : 'sku'})
+                    if prop:
+                        citem.shelfmark = prop[0].text
+
+                    prop = row.findAll('td', {'class' : 'loan'})
+                    if prop:
+                        citem.item_type = prop[0].text
+
+                    prop = row.findAll('td', {'class' : re.compile(r'item-status .*')})
+                    if prop:
+                        citem.status = prop[0].text
+                        citem.status = citem.status.strip()
+
+                    bri.add_item(citem)
+
+        return bri
+
+
 
 if __name__ == '__main__':
     # using argparse to get the command line args
