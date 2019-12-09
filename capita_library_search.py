@@ -1,27 +1,17 @@
 # Copyright 2019-present, B. S. Chambers --- Distributed under GPL version 3
 
-"""Gets information from CapitaDiscovery Library Management System websites via
-web-scraping with BeautifulSoup.
-
-
+"""Get search information from capitadiscovery based library catalogue websites
+by web-scraping with BeautifulSoup.
 
 USAGE:
 
- $ python3 -i capita_library_search.py -t "bedlam" -a "brookmyre" -b islington
+ $ python -i capita_library_search.py -t "diary of a nobody" -a grossmith -b islington
 
-NOTE: using -i option to enter into interactive python interpreter after running
-the script.
+NOTE: Using -i option to enter into interactive python interpreter after running
+the script. This way the search-results object can be queried interactively
+after the search is done. If you want it to just print the results to the
+terminal and then quit, leave out the -i option.
 
-
-
-At the time of writing, several UK library services use Capita.
-
-These have been tested:
-- islington
-- walsall
-
-To be tested:
-- worcs
 """
 
 from requests import get
@@ -149,6 +139,7 @@ class CapitaSearch(object):
         self.borough_url = ''
         self.search_url = ''
         self.items_found = []
+        self.error_message = ''
 
         if not (title or author):
             log_error('IslingtonSearch: must supply title and/or author\n')
@@ -159,15 +150,19 @@ class CapitaSearch(object):
         # build search url
         self.search_url = self.borough_url + 'items?query='
         if title:
-            self.search_url += 'title%3A%28' + title + '%29'
+            self.search_url += '+title%3A%28' + title + '%29'
         if author:
             if title:
-                self.search_url += '+AND+'
-            self.search_url += 'author%3A%28' + author + '%29'
+                self.search_url += '+AND'
+            self.search_url += '+author%3A%28' + author + '%29'
         self.search_url += '#availability'
 
         # get website
         raw_html = simple_get(self.search_url)
+        if not raw_html:
+            self.error_message = "could not get web page"
+            return
+
         html = BeautifulSoup(raw_html, 'html.parser')
 
         # extract info
@@ -290,3 +285,6 @@ if __name__ == '__main__':
     print('title = {}'.format(title))
     print('author = {}'.format(author))
     print('borough = {}\n'.format(borough))
+
+    if search.error_message:
+        print('ERROR: {}\n'.format(search.error_message))
