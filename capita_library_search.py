@@ -5,7 +5,7 @@ web-scraping with BeautifulSoup.
 
 USAGE:
 
- $ python3 -i islington.py -t "stitch in time" -a "l'engle" -b islington
+ $ python3 -i capita_library_search.py -t "bedlam" -a "brookmyre" -b islington
 
 NOTE: using -i option to enter into interactive python interpreter after running
 the script.
