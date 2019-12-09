@@ -1,3 +1,5 @@
+"""Gets information from the Islington Libraries Catalogue."""
+
 from requests import get
 from requests.exceptions import RequestException
 from contextlib import closing
@@ -5,6 +7,7 @@ from bs4 import BeautifulSoup
 from io import StringIO
 import re
 import sys
+import argparse
 
 def log_error(e):
     """
@@ -49,6 +52,7 @@ class CatalogueItem(object):
     link = 'default'
     summary = 'default'
     available = 'default'
+    branches = []
 
     def to_string(self):
         s = StringIO()
@@ -58,6 +62,8 @@ class CatalogueItem(object):
         s.write('LINK:      {}\n'.format(self.link))
         s.write('SUMMARY:   {}\n'.format(self.summary))
         s.write('AVAILABLE: {}'.format(self.available))
+        for b in branches:
+            s.write('')
         return s.getvalue()
 
 class IslingtonSearch(object):
@@ -70,25 +76,20 @@ class IslingtonSearch(object):
     def __init__(self, title='', author=''):
 
         if not (title or author):
-            log_error('IslingtonSearch: must supply title and/or author')
+            log_error('IslingtonSearch: must supply title and/or author\n')
             return
 
         # build search url
-
         self.search_url = self.islington_url + 'items?query='
-
         if title:
-            self.search_url += 'title%3A%28' + author + '%29'
-
+            self.search_url += 'title%3A%28' + title + '%29'
         if author:
             if title:
                 self.search_url += '+AND+'
             self.search_url += 'author%3A%28' + author + '%29'
-
-            self.search_url += '#availability'
+        self.search_url += '#availability'
 
         # get website
-
         raw_html = simple_get(self.search_url)
         html = BeautifulSoup(raw_html, 'html.parser')
 
@@ -123,9 +124,7 @@ class IslingtonSearch(object):
                         new_item.summary = span[0].text
 
                 # availability
-
                 html = BeautifulSoup(simple_get(new_item.link), 'html.parser')
-
                 div_avail = html.select('div#availability')
                 if div_avail:
                     div_status = div_avail[0].select('div.status')
@@ -137,15 +136,25 @@ class IslingtonSearch(object):
                 self.items_found.append(new_item)
 
 if __name__ == '__main__':
-    if len(sys.argv) < 3:
-        print('need more args: {}'.format(sys.argv))
-    else:
-        title = sys.argv[1]
-        author = sys.argv[2]
-        print('\nSEARCHING FOR: {}, {}\n'.format(title, author))
-        search = IslingtonSearch(title, author)
-        count = 0
-        for item in search.items_found:
-            count += 1
-            print('ITEM {}:\n{}\n'.format(count, item.to_string()))
-        print('{} ITEMS FOUND'.format(len(search.items_found)))
+    # using argparse to get the command line args
+    parser = argparse.ArgumentParser(description='Search Islington Library Catalogue')
+    parser.add_argument('--title', '-t', metavar='T', type=str, nargs=1)
+    parser.add_argument('--author', '-a', metavar='A', type=str, nargs=1)
+    args = parser.parse_args()
+    title = args.title
+    author = args.author
+    # argparse get the args as lists
+    if isinstance(title, list): title = title[0]
+    if isinstance(author, list): author = author[0]
+
+    print('\nSEARCHING: title="{}", author="{}"\n'.format(title, author))
+    search = IslingtonSearch(title, author)
+    count = 0
+    for item in search.items_found:
+        count += 1
+        print('ITEM {}:\n{}\n'.format(count, item.to_string()))
+
+    print('{} ITEMS FOUND'.format(len(search.items_found)))
+    print('\nUSING SEARCH URL: {}\n'.format(search.search_url))
+    print('title = {}'.format(title))
+    print('author = {}\n'.format(author))
