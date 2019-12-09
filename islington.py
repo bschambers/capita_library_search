@@ -1,4 +1,15 @@
-"""Gets information from the Islington Libraries Catalogue."""
+"""Gets information from online library catalogues using the CapitaDiscovery
+Library Management System.
+
+At the time of writing, several UK library services use Capita.
+
+These have been tested:
+islington
+walsall
+
+To be tested:
+worcs
+"""
 
 from requests import get
 from requests.exceptions import RequestException
@@ -44,7 +55,15 @@ def is_good_response(resp):
             and content_type.find('html') > -1)
 
 class CatalogueItem(object):
-    """Represents a library catalogue item."""
+    """A library catalogue item."""
+    pass
+
+class BranchResultItem(object):
+    """A search results item's library branch detail."""
+    pass
+
+class SearchResultItem(object):
+    """A search results item."""
 
     item_id = 'default'
     title = 'default'
@@ -62,25 +81,29 @@ class CatalogueItem(object):
         s.write('LINK:      {}\n'.format(self.link))
         s.write('SUMMARY:   {}\n'.format(self.summary))
         s.write('AVAILABLE: {}'.format(self.available))
-        for b in branches:
-            s.write('')
+        for b in self.branches:
+            s.write('BRANCH: {}'.format(b))
         return s.getvalue()
 
-class IslingtonSearch(object):
+class CapitaSearch(object):
     """Get search results from Islington Library Catalogue."""
 
-    islington_url = 'https://capitadiscovery.co.uk/islington/'
+    capita_url = 'https://capitadiscovery.co.uk/'
+    borough_url = ''
     search_url = ''
     items_found = []
+    default_borough = 'islington'
 
-    def __init__(self, title='', author=''):
+    def __init__(self, title='', author='', borough=''):
 
         if not (title or author):
             log_error('IslingtonSearch: must supply title and/or author\n')
             return
 
+        self.borough_url = self.capita_url + (borough if borough else self.default_borough) + '/'
+
         # build search url
-        self.search_url = self.islington_url + 'items?query='
+        self.search_url = self.borough_url + 'items?query='
         if title:
             self.search_url += 'title%3A%28' + title + '%29'
         if author:
@@ -98,7 +121,7 @@ class IslingtonSearch(object):
         for search_results in html.select('div#searchResults'):
 
             for div in search_results.select('div.summary'):
-                new_item = CatalogueItem()
+                new_item = SearchResultItem()
 
                 h2 = div.select('h2.title')
                 if h2:
@@ -109,7 +132,7 @@ class IslingtonSearch(object):
                         match_obj = re.search(r'items/([0-9]+)\?', temp_link)
                         if match_obj:
                             new_item.item_id = match_obj.group(1)
-                            new_item.link = self.islington_url + 'items/' + new_item.item_id
+                            new_item.link = self.borough_url + 'items/' + new_item.item_id
 
                 div_pub = div.select('div.publisher')
                 if div_pub:
@@ -140,15 +163,20 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Search Islington Library Catalogue')
     parser.add_argument('--title', '-t', metavar='T', type=str, nargs=1)
     parser.add_argument('--author', '-a', metavar='A', type=str, nargs=1)
+    parser.add_argument('--borough', '-b', metavar='B', type=str, nargs=1)
     args = parser.parse_args()
     title = args.title
     author = args.author
+    borough = args.borough
     # argparse get the args as lists
     if isinstance(title, list): title = title[0]
     if isinstance(author, list): author = author[0]
+    if isinstance(borough, list): borough = borough[0]
 
-    print('\nSEARCHING: title="{}", author="{}"\n'.format(title, author))
-    search = IslingtonSearch(title, author)
+    print('\nSEARCHING: title="{}", author="{}", borough="{}"\n'.format(title,
+                                                                        author,
+                                                                        borough))
+    search = CapitaSearch(title, author, borough)
     count = 0
     for item in search.items_found:
         count += 1
@@ -157,4 +185,5 @@ if __name__ == '__main__':
     print('{} ITEMS FOUND'.format(len(search.items_found)))
     print('\nUSING SEARCH URL: {}\n'.format(search.search_url))
     print('title = {}'.format(title))
-    print('author = {}\n'.format(author))
+    print('author = {}'.format(author))
+    print('borough = {}\n'.format(borough))
