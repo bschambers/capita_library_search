@@ -154,8 +154,8 @@ class CapitaSearch(object):
         if author:
             if title:
                 self.search_url += '+AND'
-            self.search_url += '+author%3A%28' + author + '%29'
-        self.search_url += '#availability'
+                self.search_url += '+author%3A%28' + author + '%29'
+                self.search_url += '#availability'
 
         # get website
         raw_html = simple_get(self.search_url)
@@ -254,27 +254,12 @@ class CapitaSearch(object):
 
         return bri
 
+def show_search(search):
+    """Prints summary of a search to standard output.
 
-
-if __name__ == '__main__':
-    # using argparse to get the command line args
-    parser = argparse.ArgumentParser(description='Search Islington Library Catalogue')
-    parser.add_argument('--title', '-t', metavar='T', type=str, nargs=1)
-    parser.add_argument('--author', '-a', metavar='A', type=str, nargs=1)
-    parser.add_argument('--borough', '-b', metavar='B', type=str, nargs=1)
-    args = parser.parse_args()
-    title = args.title
-    author = args.author
-    borough = args.borough
-    # argparse get the args as lists
-    if isinstance(title, list): title = title[0]
-    if isinstance(author, list): author = author[0]
-    if isinstance(borough, list): borough = borough[0]
-
-    print('\nSEARCHING: title="{}", author="{}", borough="{}"\n'.format(title,
-                                                                        author,
-                                                                        borough))
-    search = CapitaSearch(title, author, borough)
+Arguments:
+    search -- a CapitaSearch object
+    """
     count = 0
     for item in search.items_found:
         count += 1
@@ -288,3 +273,76 @@ if __name__ == '__main__':
 
     if search.error_message:
         print('ERROR: {}\n'.format(search.error_message))
+
+def do_search(title, author, borough):
+    print('\nSEARCHING: title="{}", author="{}", borough="{}"\n'.format(title,
+                                                                        author,
+                                                                        borough))
+    search = CapitaSearch(title, author, borough)
+    show_search(search)
+    return search
+
+def do_search_from_file(filename):
+    print('\nDO SEARCH FROM FILE: \n'.format(filename))
+    borough = ""
+    author = ""
+    title = ""
+    search_results = []
+    # open the file and process it line by line
+    # using 'with' means that the file is properly closed, even if an exception is raised
+    with open(filename, 'r') as f:
+        for line in f:
+            # each line should consist of two parts:
+            # 1: a directive specifier (-b, -a or -t)
+            # 2: the content
+            parts = line.split()
+            if len(parts) > 1:
+
+                # get first word of line (it should be a directive specifier)
+                parts = line.split()
+                directive = parts[0]
+                # rest of line is the content
+                content = " ".join(parts[1:])
+
+                if directive == '-b':
+                    borough = content
+                    print("borough set to \"" + borough + '"')
+
+                elif directive == '-a':
+                    author = content
+                    print("author set to \"" + author + '"')
+
+                elif directive == '-t':
+                    title = content
+                    print("title set to \"" + title + '"')
+                    search = CapitaSearch(title, author, borough)
+                    search_results = search_results + [search]
+                    show_search(search)
+
+    return search_results
+
+if __name__ == '__main__':
+    # using argparse to get the command line args
+    parser = argparse.ArgumentParser(description='Search Islington Library Catalogue')
+    parser.add_argument('--title', '-t', metavar='T', type=str, nargs=1)
+    parser.add_argument('--author', '-a', metavar='A', type=str, nargs=1)
+    parser.add_argument('--borough', '-b', metavar='B', type=str, nargs=1)
+    parser.add_argument('--filename', '-f', metavar='F', type=str, nargs=1)
+    args = parser.parse_args()
+    title = args.title
+    author = args.author
+    borough = args.borough
+    filename = args.filename
+    # argparse gets the args as lists - let's just take the first elements
+    if isinstance(title, list): title = title[0]
+    if isinstance(author, list): author = author[0]
+    if isinstance(borough, list): borough = borough[0]
+    if isinstance(filename, list): filename = filename[0]
+
+    results = []
+
+    if filename:
+        results = do_search_from_file(filename)
+    else:
+        search = do_search(title, author, borough)
+        results = [search]
