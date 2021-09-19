@@ -136,9 +136,12 @@ class CapitaSearch(object):
 
     def __init__(self, title='', author='', borough=''):
 
+        self.title = title
+        self.author = author
+
         self.borough_url = ''
         self.search_url = ''
-        self.items_found = []
+        self.items_found = [] # a list of SearchResultItem
         self.error_message = ''
 
         if not (title or author):
@@ -321,6 +324,34 @@ def do_search_from_file(filename):
 
     return search_results
 
+def write_output_file_html(results):
+    """Presents the results nicely in an HTML file.
+
+Arguments:
+    results -- a list of CapitaSearch objects
+"""
+    print("\n... writing results to file: ouput.html...\n\n")
+    with open('output.html', 'w') as f:
+        f.write("<!DOCTYPE html>\n")
+        f.write("<html>\n")
+        f.write("<head>\n")
+        f.write("<title>CAPITA LIBRARY SEARCH</title>\n")
+        f.write("</head>\n")
+        f.write("<body>\n")
+        for search in results:
+            f.write("<h2>TITLE: {}, AUTHOR: {}</h2>\n".format(search.title, search.author))
+            f.write("<p>{} items found</p>".format(len(search.items_found)))
+            if len(search.items_found) > 0:
+                f.write("<ol>")
+                for item in search.items_found:
+                    available = item.available
+                    title = item.title
+                    branches = item.branches
+                    f.write("<li>{} / {} / {}</li>".format(available, title,  branches))
+                f.write("</ol>")
+        f.write("</body>\n")
+        f.write("</html>\n")
+
 if __name__ == '__main__':
     # using argparse to get the command line args
     parser = argparse.ArgumentParser(description='Search Islington Library Catalogue')
@@ -346,3 +377,5 @@ if __name__ == '__main__':
     else:
         search = do_search(title, author, borough)
         results = [search]
+
+    write_output_file_html(results)

@@ -33,11 +33,55 @@ the script. This way the search-results object can be queried interactively
 after the search is done. If you want it to just print the results to the
 terminal and then quit, leave out the -i option.
 
-** TODO Batch Running
-- lists in file
-- use presentation document
-  - extract items from presentation document
-  - OR produce presentation document from lists
+** INTERACTIVE QUERY EXAMPLES:
+
+Use the -i option to interactively query search results in the python REPL (see above).
+
+The list of items found:
+
+ >>> search.items_found
+
+The first item in the list:
+
+ >>> search.items_found[0]
+
+The publisher:
+
+ >>> search.items_found[0].publisher
+
+Number of library branches where book is held:
+
+ >>> len(search.items_found[0].branches)
+
+Name of first library branch in list, and is it currently available:
+
+ >>> search.items_found[0].branches[0].name
+ >>> search.items_found[0].branches[0].is_available
+
+** Batch Running
+
+#+BEGIN_SRC shell
+$ python capita_library_search.py -f test_input_file
+#+END_SRC
+
+*** sample file
+
+-b islington
+
+-a grossmith
+
+-t "diary of a nobody"
+
+-a bukowski
+
+-t "factotum"
+
+*** WORK TODO
+
+ - input file format
+ - use presentation document
+   - extract items from presentation document
+   - OR produce presentation document from lists
 
 * Which Library Authorities Will This Work With (lists updated December 2019)
 
@@ -87,6 +131,7 @@ These UK library authorities use SirsiDynix rather than capitadiscovery:
 * Dependencies
 - Python 3
 - requests
+- argparse
 - BeautifulSoup (bs4)
 
 * Copyright and License
