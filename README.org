@@ -1,7 +1,12 @@
+#+TITLE: plscrape: Scraping Search Results from Public Library Catalogues
+
 * Introduction
 
-Get search information from capitadiscovery based library catalogue websites by
+Get search information from UK public library service catalogue websites by
 web-scraping with BeautifulSoup.
+
+Currently only supports websites based on /prism.librarymanagementcloud.co.uk/. I
+plan to also support /capitadiscovery/ and /sirsidynix/.
 
 A public librarian who I know compiled a series of lists of children's books on
 different themes as an aid to library users. Every book has been carefully
@@ -15,17 +20,13 @@ and new items are added all the time. Periodically doing manual catalogue checks
 on hundreds of items is not at all practical in modern public libraries, where
 staffing levels are generally at the bare minimum.
 
-A fairly sizeable selection of UK public library authorities use the Capita LMS
-(Library Management System) and have a capitadiscovery based catalogue
-website. See below for a list of websites have been tested.
-
 * Usage
 ** Command Line
 
 This is how you can do a single author and title search at the command line:
 
 #+BEGIN_SRC shell
-$ python -i capita_library_search.py -t "diary of a nobody" -a grossmith -b islington
+$ python -i plscrape.py -l islington -t "diary of a nobody" -a grossmith
 #+END_SRC
 
 NOTE: Using -i option to enter into interactive python interpreter after running
@@ -39,94 +40,30 @@ Use the -i option to interactively query search results in the python REPL (see 
 
 The list of items found:
 
- >>> search.items_found
+: >>> search.items_found
 
 The first item in the list:
 
- >>> search.items_found[0]
+: >>> search.items_found[0]
 
 The publisher:
 
- >>> search.items_found[0].publisher
+: >>> search.items_found[0].publisher
 
 Number of library branches where book is held:
 
- >>> len(search.items_found[0].branches)
+: >>> len(search.items_found[0].branches)
 
 Name of first library branch in list, and is it currently available:
 
- >>> search.items_found[0].branches[0].name
- >>> search.items_found[0].branches[0].is_available
+: >>> search.items_found[0].branches[0].name
+: >>> search.items_found[0].branches[0].is_available
 
 ** Batch Running
 
 #+BEGIN_SRC shell
-$ python capita_library_search.py -f test_input_file
+$ python plscrape.py -f test_input_file
 #+END_SRC
-
-*** sample file
-
--b islington
-
--a grossmith
-
--t "diary of a nobody"
-
--a bukowski
-
--t "factotum"
-
-*** WORK TODO
-
- - input file format
- - use presentation document
-   - extract items from presentation document
-   - OR produce presentation document from lists
-
-* Which Library Authorities Will This Work With (lists updated December 2019)
-
-The following UK library authorities have been tested:
-
-London Boroughs:
-- haringey
-- barnet
-- bromley
-- islington
-- royalgreenwich
-- wandsworth
-- southwark
-
-Other:
-- bracknellforest
-- bradford
-- cornwall
-- dudley
-- eastlothian
-- fife
-- gloslibraries (gloucestershire)
-- hartlepool
-- herefordshire
-- lancashire
-- leeds
-- liverpool
-- moray
-- northtyneside
-- sandwell
-- solihull
-- stockton
-- swindon
-- walsall
-- wigan
-- wirral
-
-Partial success only (no availability info and very slow to retrieve):
-- lambeth
-- worcs (Worcestershire)
-
-These UK library authorities use SirsiDynix rather than capitadiscovery:
-- city of london
-- wcc (worcestershire county council)
-- gwynedd
 
 * Dependencies
 - Python 3
@@ -136,8 +73,8 @@ These UK library authorities use SirsiDynix rather than capitadiscovery:
 
 * Copyright and License
 
-Project website: https://github.com/bschambers/capita_library_search
+Project website: https://github.com/bstancham/capita-library-search
 
-Copyright 2019-present, B. S. Chambers
+Copyright 2019-present, B. S. Tancham (formerly B. S. Chambers)
 
 Released under the GPL, version 3

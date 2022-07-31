@@ -1,11 +1,11 @@
-# Copyright 2019-present, B. S. Chambers --- Distributed under GPL version 3
+# Copyright 2019-present, B. S. Tancham --- Distributed under GPL version 3
 
 """Get search information from capitadiscovery based library catalogue websites
 by web-scraping with BeautifulSoup.
 
 USAGE:
 
- $ python -i capita_library_search.py -t "diary of a nobody" -a grossmith -b islington
+ $ python -i plscrape.py -t "diary of a nobody" -a grossmith -l islington
 
 NOTE: Using -i option to enter into interactive python interpreter after running
 the script. This way the search-results object can be queried interactively
@@ -80,7 +80,7 @@ class BranchResultItem(object):
 
     def __init__(self):
         self.name = ''
-        self.items = []
+        self.items = [] # list of CatalogueItem
 
     def add_item(self, cat_item):
         "cat_item = a CatalogueItem"
@@ -95,9 +95,9 @@ class BranchResultItem(object):
     def to_string(self):
         available = ' (AVAILABLE)' if self.is_available() else ''
         s = StringIO()
-        s.write('BRANCH: {}{}\n'.format(self.name, available))
+        s.write('... BRANCH: {}{}\n'.format(self.name, available))
         for i in self.items:
-            s.write('... {}\n'.format(i.to_string()))
+            s.write('... ... {}\n'.format(i.to_string()))
         return s.getvalue()
 
 class SearchResultItem(object):
@@ -128,99 +128,149 @@ class SearchResultItem(object):
             s.write(b.to_string())
         return s.getvalue()
 
-class CapitaSearch(object):
-    """Get search results from CapitaDiscovery Library Catalogue website."""
+class PLSearch(object):
+    """Get search results from Library Catalogue website.
 
-    capita_url = 'https://capitadiscovery.co.uk/'
-    default_borough = 'islington'
+    Abstract Base Class.
+    """
 
-    def __init__(self, title='', author='', borough=''):
+    title = ''
+    author = ''
+    libservice = ''
+    catalogue_url = ''
+    search_url = ''
+    items_found = [] # a list of SearchResultItem
+    error_message = ''
 
+    def run_search(self, site_engine, libservice, title='', author=''):
+        self.catalogue_url = site_engine.get_catalogue_url(libservice);
         self.title = title
         self.author = author
 
-        self.borough_url = ''
-        self.search_url = ''
-        self.items_found = [] # a list of SearchResultItem
-        self.error_message = ''
-
         if not (title or author):
-            log_error('IslingtonSearch: must supply title and/or author\n')
+            log_error('PLSearch: must supply title and/or author\n')
             return
 
-        self.borough_url = self.capita_url + (borough if borough else self.default_borough) + '/'
+        self.search_url = site_engine.build_search_url(self.catalogue_url, self.title, self.author)
 
-        # build search url
-        self.search_url = self.borough_url + 'items?query='
-        if title:
-            self.search_url += '+title%3A%28' + title + '%29'
-        if author:
-            if title:
-                self.search_url += '+AND'
-                self.search_url += '+author%3A%28' + author + '%29'
-                self.search_url += '#availability'
+        print("RUN SEARCH:")
+        print(f"title={self.title}")
+        print(f"author={self.author}")
+        print(f"catalogue url={self.catalogue_url}")
+        print(f"search url={self.search_url}")
 
-        # get website
+        # get website and parse html with BeautifulSoup
         raw_html = simple_get(self.search_url)
         if not raw_html:
             self.error_message = "could not get web page"
             return
-
         html = BeautifulSoup(raw_html, 'html.parser')
 
         # extract info
+        self.items_found = site_engine.get_search_results(html)
 
+class CapitaEngine(object):
+    """Site-Engine for capitadiscovery websites."""
+
+    capita_url = 'https://capitadiscovery.co.uk/'
+
+    def get_catalogue_url(self, libservice):
+        return self.capita_url + libservice + '/'
+
+class PrismEngine(object):
+    """Site-Engine for prism.librarymanagementcloud websites."""
+
+    prism_url = 'https://prism.librarymanagementcloud.co.uk/'
+
+    def get_catalogue_url(self, libservice):
+        return self.prism_url + libservice + '/'
+
+    def build_search_url(self, catalogue_url, title='', author=''):
+        """Get search url in this format:
+
+        https://prism.librarymanagementcloud.co.uk/islington/items?query=diary+of+a+nobody
+        https://prism.librarymanagementcloud.co.uk/islington/items?query=+title%3A%28diary+of+a+nobody%29
+        https://prism.librarymanagementcloud.co.uk/islington/items?query=+author%3A%28grossmith%29+AND+title%3A%28diary+of+a+nobody%29
+        """
+        title_str = ''
+        author_str = ''
+        if title:
+            title_str = '+title%3A%28' + title.replace(' ', '+') + '%29'
+        if author:
+            author_str = '+author%3A%28' + author.replace(' ', '+') + '%29'
+        url = catalogue_url + 'items?query=' + title_str
+        if author_str:
+            url += '+AND'
+        url += author_str
+        return url
+
+    def get_search_results(self, html):
+        items_found = []
         for search_results in html.select('div#searchResults'):
+            # get direct child nodes
+            for record in search_results.find_all(recursive=False):
+                print("\nNEXT ITEM:")
+                item = SearchResultItem()
 
-            for div in search_results.select('div.summary'):
-                new_item = SearchResultItem()
+                # link
+                # id
+                item.link = record.get('id', 'NOT FOUND')
+                match_obj = re.search(r'items/([0-9]+)', item.link)
+                if match_obj:
+                    item.item_id = match_obj.group(1)
 
-                h2 = div.select('h2.title')
-                if h2:
-                    a = h2[0].select('a')
-                    if a:
-                        new_item.title = a[0].get('title', 'NOT FOUND')
-                        temp_link = a[0].get('href', 'NOT FOUND')
-                        match_obj = re.search(r'items/([0-9]+)\?', temp_link)
-                        if match_obj:
-                            new_item.item_id = match_obj.group(1)
-                            new_item.link = self.borough_url + 'items/' + new_item.item_id
+                div_list = record.select('div.summary')
+                if div_list:
+                    div = div_list[0]
 
-                div_pub = div.select('div.publisher')
-                if div_pub:
-                    span = div_pub[0].select('span.publisher')
-                    if span:
-                        new_item.publisher = span[0].text
+                    # title
+                    h2 = div.select('h2.title')
+                    if h2:
+                        a = h2[0].select('a')
+                        if a:
+                            item.title = a[0].get('title', 'NOT FOUND')
 
-                div_summ = div.select('div.summarydetail')
-                if div_summ:
-                    span = div_summ[0].select('span.summarydetail')
-                    if span:
-                        new_item.summary = span[0].text
+                    # publisher
+                    div_pub = div.select('div.publisher')
+                    if div_pub:
+                        span = div_pub[0].select('span.publisher')
+                        if span:
+                            item.publisher = span[0].text
 
-                # availability
-                html = BeautifulSoup(simple_get(new_item.link), 'html.parser')
-                div_avail = html.select('div#availability')
-                if div_avail:
+                    # summary
+                    div_summ = div.select('div.summarydetail')
+                    if div_summ:
+                        span = div_summ[0].select('span.summarydetail')
+                        if span:
+                            item.summary = span[0].text
 
-                    avail_status = div_avail[0].select('div.status')
-                    if avail_status:
-                        p_branches = avail_status[0].select('p.branches')
-                        if p_branches:
-                            new_item.available = p_branches[0].text
+                    # availability
+                    html = BeautifulSoup(simple_get(item.link), 'html.parser')
+                    item.available = 'NOT AVAILABLE'
+                    div_avail = html.select('div#availability')
+                    if div_avail:
 
-                    ul_options = div_avail[0].select('ul.options')
-                    if ul_options:
-                        li_branches = ul_options[0].select('li')
+                        avail_status = div_avail[0].select('div.status')
+                        if avail_status:
+                            p_branches = avail_status[0].select('p.branches')
+                            if p_branches:
+                                item.available = p_branches[0].text
 
-                        # print('\nLI_BRANCHES: {}\n'.format(li_branches))
-                        for li_branch in li_branches:
-                            bri = self.getBranchResultItem(li_branch)
-                            new_item.add_branch_result(bri)
+                        # branch result details
+                        ul_options = div_avail[0].select('ul.options')
+                        if ul_options:
+                            li_branches = ul_options[0].select('li')
+                            for lib in li_branches:
+                                bri = self.get_branch_result_item(lib)
+                                item.add_branch_result(bri)
 
-                self.items_found.append(new_item)
+                print(item.to_string())
+                items_found.append(item)
 
-    def getBranchResultItem(self, branch):
+            print(f"... found {len(items_found)} items")
+        return items_found
+
+    def get_branch_result_item(self, branch):
 
         bri = BranchResultItem()
 
@@ -261,8 +311,9 @@ def show_search(search):
     """Prints summary of a search to standard output.
 
 Arguments:
-    search -- a CapitaSearch object
+    search -- a PLSearch object
     """
+    
     count = 0
     for item in search.items_found:
         count += 1
@@ -270,24 +321,25 @@ Arguments:
 
     print('{} ITEMS FOUND'.format(len(search.items_found)))
     print('\nUSING SEARCH URL: {}\n'.format(search.search_url))
-    print('title = {}'.format(title))
-    print('author = {}'.format(author))
-    print('borough = {}\n'.format(borough))
+    print('title = {}'.format(search.title))
+    print('author = {}'.format(search.author))
+    print('library service = {}\n'.format(search.libservice))
 
     if search.error_message:
         print('ERROR: {}\n'.format(search.error_message))
 
-def do_search(title, author, borough):
-    print('\nSEARCHING: title="{}", author="{}", borough="{}"\n'.format(title,
-                                                                        author,
-                                                                        borough))
-    search = CapitaSearch(title, author, borough)
+def do_search(libservice, title, author):
+    print(f'\nSEARCHING: library-service="{libservice}", title="{title}", author="{author}"\n')
+    # search = CapitaSearch(title, author, libservice)
+    search = PLSearch()
+    search.run_search(PrismEngine(), libservice=libservice, title=title, author=author)
     show_search(search)
     return search
 
 def do_search_from_file(filename):
     print('\nDO SEARCH FROM FILE: \n'.format(filename))
-    borough = ""
+    backend = PrismEngine()
+    libservice = ""
     author = ""
     title = ""
     search_results = []
@@ -296,7 +348,7 @@ def do_search_from_file(filename):
     with open(filename, 'r') as f:
         for line in f:
             # each line should consist of two parts:
-            # 1: a directive specifier (-b, -a or -t)
+            # 1: a directive specifier (-l, -a or -t)
             # 2: the content
             parts = line.split()
             if len(parts) > 1:
@@ -307,9 +359,9 @@ def do_search_from_file(filename):
                 # rest of line is the content
                 content = " ".join(parts[1:])
 
-                if directive == '-b':
-                    borough = content
-                    print("borough set to \"" + borough + '"')
+                if directive == '-l':
+                    libservice = content
+                    print("libservice set to \"" + libservice + '"')
 
                 elif directive == '-a':
                     author = content
@@ -318,7 +370,8 @@ def do_search_from_file(filename):
                 elif directive == '-t':
                     title = content
                     print("title set to \"" + title + '"')
-                    search = CapitaSearch(title, author, borough)
+                    search = PLSearch()
+                    search.run_search(backend, libservice, title, author)
                     search_results = search_results + [search]
                     show_search(search)
 
@@ -340,7 +393,7 @@ Arguments:
         f.write("<body>\n")
         for search in results:
             f.write("<h2>TITLE: {}, AUTHOR: {}</h2>\n".format(search.title, search.author))
-            f.write("<p>{} items found</p>".format(len(search.items_found)))
+            f.write("<p>{} records found</p>".format(len(search.items_found)))
             if len(search.items_found) > 0:
                 f.write("<ol>")
                 for item in search.items_found:
@@ -348,6 +401,13 @@ Arguments:
                     title = item.title
                     branches = item.branches
                     f.write("<li>{} / {} / {}</li>".format(available, title,  branches))
+                    # f.write("<li>{} / {} / {}".format(available, title,  branches))
+                    # if len(item.branches) > 0:
+                    #     f.write("<ol")
+                    #     for cat_item in item.branches:
+                    #         f.write("<li>{}</li>".format(cat_item.to_string()))
+                    #     f.write("</ol>")
+                    # f.write("</li>")
                 f.write("</ol>")
         f.write("</body>\n")
         f.write("</html>\n")
@@ -357,17 +417,17 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Search Islington Library Catalogue')
     parser.add_argument('--title', '-t', metavar='T', type=str, nargs=1)
     parser.add_argument('--author', '-a', metavar='A', type=str, nargs=1)
-    parser.add_argument('--borough', '-b', metavar='B', type=str, nargs=1)
+    parser.add_argument('--libservice', '-l', metavar='L', type=str, nargs=1)
     parser.add_argument('--filename', '-f', metavar='F', type=str, nargs=1)
     args = parser.parse_args()
+    filename = args.filename
+    libservice = args.libservice
     title = args.title
     author = args.author
-    borough = args.borough
-    filename = args.filename
     # argparse gets the args as lists - let's just take the first elements
     if isinstance(title, list): title = title[0]
     if isinstance(author, list): author = author[0]
-    if isinstance(borough, list): borough = borough[0]
+    if isinstance(libservice, list): libservice = libservice[0]
     if isinstance(filename, list): filename = filename[0]
 
     results = []
@@ -375,7 +435,13 @@ if __name__ == '__main__':
     if filename:
         results = do_search_from_file(filename)
     else:
-        search = do_search(title, author, borough)
+        if not libservice:
+            print("Please specify the library service to search, or provide an input file.")
+            exit(1)
+        if not (title or author):
+            print("Please specify a title and/or an author.")
+            exit(1)
+        search = do_search(libservice, title, author)
         results = [search]
 
     write_output_file_html(results)

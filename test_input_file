@@ -1,4 +1,4 @@
--b islington
+-l islington
 
 -a grossmith
 
@@ -10,7 +10,7 @@
 
 -a vere
 
--t "bananna"
+-t "banana"
 
 -a hartley
 
