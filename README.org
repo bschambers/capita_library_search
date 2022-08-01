@@ -40,6 +40,7 @@ PLScrape Command Line Options:
 + -a = author
 + -t = title
 + -o = output filename
++ -d = discover catalogue
 
 ** INTERACTIVE QUERY EXAMPLES:
 

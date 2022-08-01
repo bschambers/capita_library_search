@@ -318,6 +318,14 @@ class PrismEngine(object):
 
         return bri
 
+class LLCSirsidynixEngine(object):
+    """Site-Engine for London Libraries Consortium sirsidynix websites."""
+
+    sirsidynix_url = 'https://llc.ent.sirsidynix.net.uk/client/en_GB/'
+
+    def get_catalogue_url(self, libservice):
+        return self.sirsidynix_url + libservice + '/'
+
 def show_search(search):
     """Prints summary of a search to standard output.
 
@@ -461,8 +469,41 @@ Arguments:
         f.write("</body>\n")
         f.write("</html>\n")
 
+def discover_catalogue(libservice, site_engines):
+    report = []
+    # try each site engine in turn
+    for engine in site_engines:
+        catalogue_url = engine.get_catalogue_url(libservice)
+        print(f"trying {catalogue_url}")
+        try:
+            with closing(get(catalogue_url, stream=True)) as resp:
+                print(f"got url: {resp.url}")
+
+                if resp.status_code == 200: # ok
+                    if libservice in resp.url:
+                        report.append(f"SUCCESS: {resp.url}")
+                    else:
+                        report.append(f"FAILED: redirected to {resp.url}")
+                else:
+                    report.append(f"FAILED: HTTP CODE {resp.status_code} {resp.url}")
+
+                if resp.history:
+                    print("REDIRECTED...")
+                    for step in resp.history:
+                        print(f"... CODE={step.status_code} URL={step.url}")
+
+        except RequestException as e:
+            log_error(f'Error during requests to {catalogue_url} : {e}')
+            report.append(f"FAILED WITH ERROR: {catalogue_url}")
+
+
+    print(f"\nDISCOVER CATALOGUE WEBSITE FOR {libservice}:")
+    for line in report:
+        print(line)
+
 if __name__ == '__main__':
     # init default values
+    discover = ""
     input_filename = ""
     libservice = ""
     author = ""
@@ -470,6 +511,7 @@ if __name__ == '__main__':
     output_filename = "output"
     # using argparse to get the command line args
     parser = argparse.ArgumentParser(description='Search Islington Library Catalogue')
+    parser.add_argument('--discover', '-d', metavar='D', type=str, nargs=1)
     parser.add_argument('--filename', '-f', metavar='F', type=str, nargs=1)
     parser.add_argument('--libservice', '-l', metavar='L', type=str, nargs=1)
     parser.add_argument('--author', '-a', metavar='A', type=str, nargs=1)
@@ -477,6 +519,8 @@ if __name__ == '__main__':
     parser.add_argument('--output', '-o', metavar='O', type=str, nargs=1)
     args = parser.parse_args()
     # argparse gets the args as lists - just want first element
+    if args.discover:
+        discover = args.discover[0]
     if args.filename:
         input_filename = args.filename[0]
     if args.libservice:
@@ -488,18 +532,27 @@ if __name__ == '__main__':
     if args.output:
         output_filename = args.output[0]
 
-    results = []
+    # discover-mode takes priority
+    if discover:
+        site_engines = [CapitaEngine(),
+                        PrismEngine(),
+                        LLCSirsidynixEngine()]
+        discover_catalogue(discover, site_engines)
 
-    if input_filename:
-        results = do_search_from_file(input_filename)
     else:
-        if not libservice:
-            print("Please specify the library service to search, or provide an input file.")
-            exit(1)
-        if not (title or author):
-            print("Please specify a title and/or an author.")
-            exit(1)
-        search = do_search(libservice, title, author)
-        results = [search]
 
-    write_output_file_html(results, output_filename)
+        results = []
+
+        if input_filename:
+            results = do_search_from_file(input_filename)
+        else:
+            if not libservice:
+                print("Please specify the library service to search, or provide an input file.")
+                exit(1)
+            if not (title or author):
+                print("Please specify a title and/or an author.")
+                exit(1)
+            search = do_search(libservice, title, author)
+            results = [search]
+
+        write_output_file_html(results, output_filename)
