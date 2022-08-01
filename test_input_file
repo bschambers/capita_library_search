@@ -1,17 +1,13 @@
--l islington
+L=islington
 
--a grossmith
+a=grossmith
+T=diary of a nobody
 
--t "diary of a nobody"
+a=bukowski
+T=factotum"
 
--a bukowski
+a=vere
+t=banana
 
--t "factotum"
-
--a vere
-
--t "banana"
-
--a hartley
-
--t "fly fishing"
+A=hartley
+T=fly fishing

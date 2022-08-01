@@ -1,4 +1,4 @@
-#+TITLE: plscrape: Scraping Search Results from Public Library Catalogues
+#+TITLE: PLScrape: Scraping Search Results from Public Library Catalogues
 
 * Introduction
 
@@ -34,6 +34,12 @@ the script. This way the search-results object can be queried interactively
 after the search is done. If you want it to just print the results to the
 terminal and then quit, leave out the -i option.
 
+PLScrape Command Line Options:
++ -f = input file
++ -l = library service (e.g. islington)
++ -a = author
++ -t = title
+
 ** INTERACTIVE QUERY EXAMPLES:
 
 Use the -i option to interactively query search results in the python REPL (see above).
@@ -60,11 +66,40 @@ Name of first library branch in list, and is it currently available:
 : >>> search.items_found[0].branches[0].is_available
 
 ** Batch Running
+*** How to Run
+: $ python plscrape.py -f input_file
 
-#+BEGIN_SRC shell
-$ python plscrape.py -f test_input_file
+*** Writing an Input File
+
+Basic rules:
+- Must specify library service before running a search.
+- Runs search every time title is given.
+- Can abbreviate parameter names to the first letter.
+- All text is case-insensitive, but for the sake of readability, I like to write
+  parameter names in uppercase and values in lowercase.
+- lines beginning with hash (#) are comments
+
+EXAMPLE:
+#+BEGIN_SRC config
+LIBRARYSERVICE=islington
+
+AUTHOR=grossmith
+TITLE=diary of a nobody
+
+AUTHOR=bukowski
+TITLE=factotum
 #+END_SRC
 
+EXAMPLE: parameter names abbreviated to first character
+#+BEGIN_SRC config
+L=islington
+
+A=grossmith
+T=diary of a nobody
+
+A=bukowski
+T=factotum
+#+END_SRC
 * Dependencies
 - Python 3
 - requests

@@ -140,7 +140,7 @@ class PLSearch(object):
     catalogue_url = ''
     search_url = ''
     items_found = [] # a list of SearchResultItem
-    error_message = ''
+    error_messages = []
 
     def run_search(self, site_engine, libservice, title='', author=''):
         self.catalogue_url = site_engine.get_catalogue_url(libservice);
@@ -313,7 +313,7 @@ def show_search(search):
 Arguments:
     search -- a PLSearch object
     """
-    
+
     count = 0
     for item in search.items_found:
         count += 1
@@ -325,8 +325,9 @@ Arguments:
     print('author = {}'.format(search.author))
     print('library service = {}\n'.format(search.libservice))
 
-    if search.error_message:
-        print('ERROR: {}\n'.format(search.error_message))
+    if search.error_messages:
+        for msg in search.error_messages:
+            print(f'ERROR: {msg}\n')
 
 def do_search(libservice, title, author):
     print(f'\nSEARCHING: library-service="{libservice}", title="{title}", author="{author}"\n')
@@ -347,33 +348,44 @@ def do_search_from_file(filename):
     # using 'with' means that the file is properly closed, even if an exception is raised
     with open(filename, 'r') as f:
         for line in f:
-            # each line should consist of two parts:
-            # 1: a directive specifier (-l, -a or -t)
-            # 2: the content
-            parts = line.split()
-            if len(parts) > 1:
+            # strip whitespace and newlines from front and back
+            # also convert to lowercase
+            line = line.strip().lower()
+            # ignore empty lines and comments
+            if line == "" or line[0] == "#":
+                pass
+            else:
+                # each line should consist of two parts:
+                # 1: a parameter name (l, a, t)
+                # 2: the parameter value
+                parts = line.split("=")
+                if len(parts) != 2:
+                    log_error(f'ERROR in do_search_from_file: line "{line}" is not a proper parameter/value pair.')
+                else:
 
-                # get first word of line (it should be a directive specifier)
-                parts = line.split()
-                directive = parts[0]
-                # rest of line is the content
-                content = " ".join(parts[1:])
+                    # get first word of line (it should be a parameter name)
+                    param = parts[0].strip()
+                    # rest of line is the content
+                    value = parts[1].strip()
 
-                if directive == '-l':
-                    libservice = content
-                    print("libservice set to \"" + libservice + '"')
+                    if param == 'l' or param == 'library' or param == 'libraryservice':
+                        libservice = value
+                        print(f'libservice set to "{libservice}"')
 
-                elif directive == '-a':
-                    author = content
-                    print("author set to \"" + author + '"')
+                    elif param == 'a' or param == 'author':
+                        author = value
+                        print(f'author set to "{author}"')
 
-                elif directive == '-t':
-                    title = content
-                    print("title set to \"" + title + '"')
-                    search = PLSearch()
-                    search.run_search(backend, libservice, title, author)
-                    search_results = search_results + [search]
-                    show_search(search)
+                    elif param == 't' or param == 'title':
+                        title = value
+                        print(f'title set to "{title}"')
+                        search = PLSearch()
+                        search.run_search(backend, libservice=libservice, title=title, author=author)
+                        search_results = search_results + [search]
+                        show_search(search)
+
+                    else:
+                        log_error(f'ERROR in do_search_from_file: parameter "{param}" not recognised.')
 
     return search_results
 
@@ -381,17 +393,21 @@ def write_output_file_html(results):
     """Presents the results nicely in an HTML file.
 
 Arguments:
-    results -- a list of CapitaSearch objects
+    results -- a list of PLSearch objects
 """
-    print("\n... writing results to file: ouput.html...\n\n")
+    print("\n... writing results to file: output.html...\n\n")
+    libservice = ""
     with open('output.html', 'w') as f:
         f.write("<!DOCTYPE html>\n")
         f.write("<html>\n")
         f.write("<head>\n")
-        f.write("<title>CAPITA LIBRARY SEARCH</title>\n")
+        f.write("<title>PLScrape: Search Results</title>\n")
         f.write("</head>\n")
         f.write("<body>\n")
         for search in results:
+            if search.libservice != libservice:
+                f.write(f'<h1>LIBRARY SERVICE: {search.libservice}')
+                libservice = search.libservice
             f.write("<h2>TITLE: {}, AUTHOR: {}</h2>\n".format(search.title, search.author))
             f.write("<p>{} records found</p>".format(len(search.items_found)))
             if len(search.items_found) > 0:
