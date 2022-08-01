@@ -144,7 +144,7 @@ into a config file:
 
 * Copyright and License
 
-Project website: https://github.com/bstancham/capita-library-search
+Project website: https://github.com/bstancham/plscrape
 
 Copyright 2019-present, B. S. Tancham (formerly B. S. Chambers)
 
