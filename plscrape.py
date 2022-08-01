@@ -1,11 +1,11 @@
 # Copyright 2019-present, B. S. Tancham --- Distributed under GPL version 3
 
-"""Get search information from capitadiscovery based library catalogue websites
-by web-scraping with BeautifulSoup.
+"""Get search information from public library catalogue websites by web-scraping
+with BeautifulSoup.
 
 USAGE:
 
- $ python -i plscrape.py -t "diary of a nobody" -a grossmith -l islington
+ $ python -i plscrape.py -l islington -a grossmith -t "diary of a nobody"
 
 NOTE: Using -i option to enter into interactive python interpreter after running
 the script. This way the search-results object can be queried interactively
@@ -19,9 +19,13 @@ from requests.exceptions import RequestException
 from contextlib import closing
 from bs4 import BeautifulSoup
 from io import StringIO
+from datetime import datetime
 import re
 import sys
 import argparse
+
+# global variables
+match_exact = True
 
 def log_error(e):
     """
@@ -109,7 +113,7 @@ class SearchResultItem(object):
         self.publisher = 'default'
         self.link = 'default'
         self.summary = 'default'
-        self.available = 'default'
+        self.available_at = 'default'
         self.branches = []
 
     def add_branch_result(self, bri):
@@ -123,7 +127,7 @@ class SearchResultItem(object):
         s.write('PUBLISHER: {}\n'.format(self.publisher))
         s.write('LINK:      {}\n'.format(self.link))
         s.write('SUMMARY:   {}\n'.format(self.summary))
-        s.write('AVAILABLE: {}\n'.format(self.available))
+        s.write('AVAILABLE: {}\n'.format(self.available_at))
         for b in self.branches:
             s.write(b.to_string())
         return s.getvalue()
@@ -143,7 +147,8 @@ class PLSearch(object):
     error_messages = []
 
     def run_search(self, site_engine, libservice, title='', author=''):
-        self.catalogue_url = site_engine.get_catalogue_url(libservice);
+        self.libservice = libservice
+        self.catalogue_url = site_engine.get_catalogue_url(self.libservice);
         self.title = title
         self.author = author
 
@@ -192,10 +197,15 @@ class PrismEngine(object):
         https://prism.librarymanagementcloud.co.uk/islington/items?query=+title%3A%28diary+of+a+nobody%29
         https://prism.librarymanagementcloud.co.uk/islington/items?query=+author%3A%28grossmith%29+AND+title%3A%28diary+of+a+nobody%29
         """
+        global match_exact
         title_str = ''
         author_str = ''
         if title:
-            title_str = '+title%3A%28' + title.replace(' ', '+') + '%29'
+            if match_exact:
+                # use quote marks around the title
+                title_str = '+title%3A%28"' + title.replace(' ', '+') + '"%29'
+            else:
+                title_str = '+title%3A%28' + title.replace(' ', '+') + '%29'
         if author:
             author_str = '+author%3A%28' + author.replace(' ', '+') + '%29'
         url = catalogue_url + 'items?query=' + title_str
@@ -246,7 +256,7 @@ class PrismEngine(object):
 
                     # availability
                     html = BeautifulSoup(simple_get(item.link), 'html.parser')
-                    item.available = 'NOT AVAILABLE'
+                    item.available_at = 'NOT AVAILABLE'
                     div_avail = html.select('div#availability')
                     if div_avail:
 
@@ -254,7 +264,7 @@ class PrismEngine(object):
                         if avail_status:
                             p_branches = avail_status[0].select('p.branches')
                             if p_branches:
-                                item.available = p_branches[0].text
+                                item.available_at = p_branches[0].text
 
                         # branch result details
                         ul_options = div_avail[0].select('ul.options')
@@ -279,31 +289,32 @@ class PrismEngine(object):
         if name_span:
             bri.name = name_span[0].text
 
-            # <tbody> - table body contains the items
-            tbody = branch.select('tbody')
-            if tbody:
-                # each <tr> is a CatalogueItem
-                for row in tbody[0].select('tr'):
-                    citem = CatalogueItem()
+        # <tbody> - table body contains the items
+        tbody = branch.select('tbody')
+        if tbody:
+            # each <tr> is a CatalogueItem
+            for row in tbody[0].select('tr'):
+                cat_item = CatalogueItem()
 
-                    prop = row.findAll('span', {'itemprop' : 'serialNumber'})
-                    if prop:
-                        citem.barcode = prop[0].text
+                prop = row.findAll('span', {'itemprop' : 'serialNumber'})
+                if prop:
+                    cat_item.barcode = prop[0].text
 
-                    prop = row.findAll('span', {'itemprop' : 'sku'})
-                    if prop:
-                        citem.shelfmark = prop[0].text
+                # SKU = Stock Keeping Unit?
+                prop = row.findAll('span', {'itemprop' : 'sku'})
+                if prop:
+                    cat_item.shelfmark = prop[0].text
 
-                    prop = row.findAll('td', {'class' : 'loan'})
-                    if prop:
-                        citem.item_type = prop[0].text
+                # get these by just counting the table cells
+                n = 0
+                for td in row.select('td'):
+                    n += 1
+                    if n == 3:
+                        cat_item.item_type = td.text.strip()
+                    elif n == 4:
+                        cat_item.status = td.text.strip()
 
-                    prop = row.findAll('td', {'class' : re.compile(r'item-status .*')})
-                    if prop:
-                        citem.status = prop[0].text
-                        citem.status = citem.status.strip()
-
-                    bri.add_item(citem)
+                bri.add_item(cat_item)
 
         return bri
 
@@ -331,7 +342,6 @@ Arguments:
 
 def do_search(libservice, title, author):
     print(f'\nSEARCHING: library-service="{libservice}", title="{title}", author="{author}"\n')
-    # search = CapitaSearch(title, author, libservice)
     search = PLSearch()
     search.run_search(PrismEngine(), libservice=libservice, title=title, author=author)
     show_search(search)
@@ -356,7 +366,7 @@ def do_search_from_file(filename):
                 pass
             else:
                 # each line should consist of two parts:
-                # 1: a parameter name (l, a, t)
+                # 1: a parameter name ([l]ibraryservice, [a]uthor, [t]itle)
                 # 2: the parameter value
                 parts = line.split("=")
                 if len(parts) != 2:
@@ -389,67 +399,99 @@ def do_search_from_file(filename):
 
     return search_results
 
-def write_output_file_html(results):
+def write_output_file_html(results, output_filename):
     """Presents the results nicely in an HTML file.
 
 Arguments:
     results -- a list of PLSearch objects
 """
-    print("\n... writing results to file: output.html...\n\n")
+    fname = output_filename.split(".")[0] + ".html"
+    print(f"\n... writing results to file: {fname}...\n\n")
     libservice = ""
-    with open('output.html', 'w') as f:
+    with open(fname, 'w') as f:
         f.write("<!DOCTYPE html>\n")
         f.write("<html>\n")
         f.write("<head>\n")
         f.write("<title>PLScrape: Search Results</title>\n")
         f.write("</head>\n")
         f.write("<body>\n")
+        dt = datetime.now()
+        dt_str = dt.strftime("%A, %d. %B %Y, %I:%M%p")
+        f.write(f"<p>TIME: {dt_str}</p>")
         for search in results:
             if search.libservice != libservice:
                 f.write(f'<h1>LIBRARY SERVICE: {search.libservice}')
                 libservice = search.libservice
             f.write("<h2>TITLE: {}, AUTHOR: {}</h2>\n".format(search.title, search.author))
-            f.write("<p>{} records found</p>".format(len(search.items_found)))
+            f.write(f'<p>SEARCH URL: <a href="{search.search_url}">{search.search_url}</a></p>')
+
+            # number of records found
+            if len(search.items_found) == 1:
+                f.write("<p>1 record found</p>")
+            else:
+                f.write(f"<p>{len(search.items_found)} records found</p>")
+
             if len(search.items_found) > 0:
                 f.write("<ol>")
                 for item in search.items_found:
-                    available = item.available
-                    title = item.title
-                    branches = item.branches
-                    f.write("<li>{} / {} / {}</li>".format(available, title,  branches))
-                    # f.write("<li>{} / {} / {}".format(available, title,  branches))
-                    # if len(item.branches) > 0:
-                    #     f.write("<ol")
-                    #     for cat_item in item.branches:
-                    #         f.write("<li>{}</li>".format(cat_item.to_string()))
-                    #     f.write("</ol>")
-                    # f.write("</li>")
+                    f.write(f'<li><b>{item.title}</b>, {item.available_at}')
+                    if len(item.branches) > 0:
+                        f.write("<ul>")
+                        for branch_item in item.branches:
+
+                            f.write(f"<li>{branch_item.name} (")
+                            if branch_item.is_available():
+                                f.write(f'<span style="color:green"><b>AVAILABLE</b></span>')
+                            else:
+                                f.write(f'<span style="color:red"><b>UNAVAILABLE</b></span>')
+                            f.write('): ')
+
+                            if len(branch_item.items) == 1:
+                                f.write(f'{branch_item.items[0].to_string()}</li>')
+                            else:
+                                f.write('<ul>')
+                                for cat_item in branch_item.items:
+                                    f.write(f'<li>{cat_item.to_string()}</li>')
+                                f.write('</ul>')
+                                f.write(f"</li>")
+
+                        f.write("</ul>")
+                    f.write("</li>")
                 f.write("</ol>")
         f.write("</body>\n")
         f.write("</html>\n")
 
 if __name__ == '__main__':
+    # init default values
+    input_filename = ""
+    libservice = ""
+    author = ""
+    title = ""
+    output_filename = "output"
     # using argparse to get the command line args
     parser = argparse.ArgumentParser(description='Search Islington Library Catalogue')
-    parser.add_argument('--title', '-t', metavar='T', type=str, nargs=1)
-    parser.add_argument('--author', '-a', metavar='A', type=str, nargs=1)
-    parser.add_argument('--libservice', '-l', metavar='L', type=str, nargs=1)
     parser.add_argument('--filename', '-f', metavar='F', type=str, nargs=1)
+    parser.add_argument('--libservice', '-l', metavar='L', type=str, nargs=1)
+    parser.add_argument('--author', '-a', metavar='A', type=str, nargs=1)
+    parser.add_argument('--title', '-t', metavar='T', type=str, nargs=1)
+    parser.add_argument('--output', '-o', metavar='O', type=str, nargs=1)
     args = parser.parse_args()
-    filename = args.filename
-    libservice = args.libservice
-    title = args.title
-    author = args.author
-    # argparse gets the args as lists - let's just take the first elements
-    if isinstance(title, list): title = title[0]
-    if isinstance(author, list): author = author[0]
-    if isinstance(libservice, list): libservice = libservice[0]
-    if isinstance(filename, list): filename = filename[0]
+    # argparse gets the args as lists - just want first element
+    if args.filename:
+        input_filename = args.filename[0]
+    if args.libservice:
+        libservice = args.libservice[0]
+    if args.author:
+        author = args.author[0]
+    if args.title:
+        title = args.title[0]
+    if args.output:
+        output_filename = args.output[0]
 
     results = []
 
-    if filename:
-        results = do_search_from_file(filename)
+    if input_filename:
+        results = do_search_from_file(input_filename)
     else:
         if not libservice:
             print("Please specify the library service to search, or provide an input file.")
@@ -460,4 +502,4 @@ if __name__ == '__main__':
         search = do_search(libservice, title, author)
         results = [search]
 
-    write_output_file_html(results)
+    write_output_file_html(results, output_filename)

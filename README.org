@@ -26,7 +26,7 @@ staffing levels are generally at the bare minimum.
 This is how you can do a single author and title search at the command line:
 
 #+BEGIN_SRC shell
-$ python -i plscrape.py -l islington -t "diary of a nobody" -a grossmith
+$ python -i plscrape.py -l islington -a grossmith -t "diary of a nobody"
 #+END_SRC
 
 NOTE: Using -i option to enter into interactive python interpreter after running
@@ -39,6 +39,7 @@ PLScrape Command Line Options:
 + -l = library service (e.g. islington)
 + -a = author
 + -t = title
++ -o = output filename
 
 ** INTERACTIVE QUERY EXAMPLES:
 
