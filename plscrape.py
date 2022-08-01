@@ -25,7 +25,12 @@ import sys
 import argparse
 
 # global variables
+config_filename = '.plscrape'
+backends_dict = {}
+library_service_backends = {}
 match_exact = True
+backend_id_prism = 'prism.librarymanagementcloud.co.uk'
+backend_id_llc_sirsidynix = 'llc.ent.sirsidynix.net.uk'
 
 def log_error(e):
     """
@@ -53,9 +58,7 @@ def simple_get(url):
         return None
 
 def is_good_response(resp):
-    """
-    Returns True if the response seems to be HTML, False otherwise.
-    """
+    """Returns True if the response seems to be HTML, False otherwise."""
     content_type = resp.headers['Content-Type'].lower()
     return (resp.status_code == 200
             and content_type is not None
@@ -132,11 +135,30 @@ class SearchResultItem(object):
             s.write(b.to_string())
         return s.getvalue()
 
-class PLSearch(object):
-    """Get search results from Library Catalogue website.
+def init_backend(backend_id):
+    global backends_dict
+    if backend_id == backend_id_prism:
+        backends_dict[backend_id] = PrismBackend()
+    elif backend_id == backend_id_llc_sirsidynix:
+        backends_dict[backend_id] = LLCSirsidynixBackend()
 
-    Abstract Base Class.
-    """
+def get_backend(libservice):
+    global backends_dict
+    global library_service_backends
+    global config_filename
+    if libservice in library_service_backends:
+        b = library_service_backends[libservice]
+        if b in backends_dict:
+            return backends_dict[b]
+        else:
+            init_backend(b)
+            return backends_dict[b]
+    else:
+        log_error(f'ERROR: library service "{libservice}" needs to be configured in {config_filename}')
+        exit(1)
+
+class PLSearch(object):
+    """Get search results from Library Catalogue website."""
 
     title = ''
     author = ''
@@ -146,9 +168,10 @@ class PLSearch(object):
     items_found = [] # a list of SearchResultItem
     error_messages = []
 
-    def run_search(self, site_engine, libservice, title='', author=''):
+    def run_search(self, libservice, title='', author=''):
         self.libservice = libservice
-        self.catalogue_url = site_engine.get_catalogue_url(self.libservice);
+        backend = get_backend(self.libservice)
+        self.catalogue_url = backend.get_catalogue_url(self.libservice);
         self.title = title
         self.author = author
 
@@ -156,7 +179,7 @@ class PLSearch(object):
             log_error('PLSearch: must supply title and/or author\n')
             return
 
-        self.search_url = site_engine.build_search_url(self.catalogue_url, self.title, self.author)
+        self.search_url = backend.build_search_url(self.catalogue_url, self.title, self.author)
 
         print("RUN SEARCH:")
         print(f"title={self.title}")
@@ -172,38 +195,28 @@ class PLSearch(object):
         html = BeautifulSoup(raw_html, 'html.parser')
 
         # extract info
-        self.items_found = site_engine.get_search_results(html)
+        self.items_found = backend.get_search_results(html)
 
-class CapitaEngine(object):
-    """Site-Engine for capitadiscovery websites."""
-
-    capita_url = 'https://capitadiscovery.co.uk/'
-
-    def get_catalogue_url(self, libservice):
-        return self.capita_url + libservice + '/'
-
-class PrismEngine(object):
-    """Site-Engine for prism.librarymanagementcloud websites."""
+class PrismBackend(object):
+    """Backend for prism.librarymanagementcloud websites."""
 
     prism_url = 'https://prism.librarymanagementcloud.co.uk/'
+
+    def get_id(self):
+        global backend_id_prism
+        return backend_id_prism
 
     def get_catalogue_url(self, libservice):
         return self.prism_url + libservice + '/'
 
     def build_search_url(self, catalogue_url, title='', author=''):
-        """Get search url in this format:
-
-        https://prism.librarymanagementcloud.co.uk/islington/items?query=diary+of+a+nobody
-        https://prism.librarymanagementcloud.co.uk/islington/items?query=+title%3A%28diary+of+a+nobody%29
-        https://prism.librarymanagementcloud.co.uk/islington/items?query=+author%3A%28grossmith%29+AND+title%3A%28diary+of+a+nobody%29
-        """
         global match_exact
         title_str = ''
         author_str = ''
         if title:
             if match_exact:
-                # use quote marks around the title
-                title_str = '+title%3A%28"' + title.replace(' ', '+') + '"%29'
+                # use quote marks around the title (%22)
+                title_str = '+title%3A%28%22' + title.replace(' ', '+') + '%22%29'
             else:
                 title_str = '+title%3A%28' + title.replace(' ', '+') + '%29'
         if author:
@@ -318,10 +331,14 @@ class PrismEngine(object):
 
         return bri
 
-class LLCSirsidynixEngine(object):
-    """Site-Engine for London Libraries Consortium sirsidynix websites."""
+class LLCSirsidynixBackend(object):
+    """Backend for London Libraries Consortium sirsidynix websites."""
 
     sirsidynix_url = 'https://llc.ent.sirsidynix.net.uk/client/en_GB/'
+
+    def get_id(self):
+        global backend_id_llc_sirsidynix
+        return backend_id_llc_sirsidynix
 
     def get_catalogue_url(self, libservice):
         return self.sirsidynix_url + libservice + '/'
@@ -351,13 +368,12 @@ Arguments:
 def do_search(libservice, title, author):
     print(f'\nSEARCHING: library-service="{libservice}", title="{title}", author="{author}"\n')
     search = PLSearch()
-    search.run_search(PrismEngine(), libservice=libservice, title=title, author=author)
+    search.run_search(libservice, title=title, author=author)
     show_search(search)
     return search
 
 def do_search_from_file(filename):
     print('\nDO SEARCH FROM FILE: \n'.format(filename))
-    backend = PrismEngine()
     libservice = ""
     author = ""
     title = ""
@@ -398,7 +414,7 @@ def do_search_from_file(filename):
                         title = value
                         print(f'title set to "{title}"')
                         search = PLSearch()
-                        search.run_search(backend, libservice=libservice, title=title, author=author)
+                        search.run_search(libservice, title=title, author=author)
                         search_results = search_results + [search]
                         show_search(search)
 
@@ -469,10 +485,11 @@ Arguments:
         f.write("</body>\n")
         f.write("</html>\n")
 
-def discover_catalogue(libservice, site_engines):
+def discover_catalogue(libservice, site_backends):
+    site_engine_for_libservice = ""
     report = []
     # try each site engine in turn
-    for engine in site_engines:
+    for engine in site_backends:
         catalogue_url = engine.get_catalogue_url(libservice)
         print(f"trying {catalogue_url}")
         try:
@@ -482,6 +499,7 @@ def discover_catalogue(libservice, site_engines):
                 if resp.status_code == 200: # ok
                     if libservice in resp.url:
                         report.append(f"SUCCESS: {resp.url}")
+                        site_engine_for_libservice = engine.get_name()
                     else:
                         report.append(f"FAILED: redirected to {resp.url}")
                 else:
@@ -500,9 +518,59 @@ def discover_catalogue(libservice, site_engines):
     print(f"\nDISCOVER CATALOGUE WEBSITE FOR {libservice}:")
     for line in report:
         print(line)
+    print(f"USE SITE-ENGINE: {site_engine_for_libservice}")
+    return site_engine_for_libservice
+
+def discover_catalogue_from_file(filename, site_backends):
+    results = []
+    with open(filename, 'r') as f:
+        for line in f:
+            line = line.strip().lower()
+            line = "-".join(line.split())
+            # ignore empty lines and comments
+            if line == "" or line[0] == "#":
+                pass
+            else:
+                engine_id = discover_catalogue(line, site_backends)
+                results.append(line + ', ' + engine_id)
+    print("\nRESULTS:")
+    for r in results:
+        print(r)
+
+def load_config():
+    global config_filename
+    global library_service_backends
+    print(f"loading config from file: {config_filename}")
+    count = 0
+    num_invalid = 0
+    with open(config_filename, 'r') as f:
+        for line in f:
+            line = line.strip().lower()
+            # ignore empty lines and comments
+            if line == "" or line[0] == "#":
+                pass
+            else:
+                # get rid of trailing comments
+                line = line.split('#')[0].strip()
+                # get key/value pair
+                parts = line.split(',')
+                valid_entry = False
+                if len(parts) == 2:
+                    k = parts[0].strip()
+                    v = parts[1].strip()
+                    if v:
+                        library_service_backends[k] = v
+                        valid_entry = True
+                if valid_entry:
+                    count += 1
+                else:
+                    num_invalid += 1
+    print(f"loaded config ({count} library services/{num_invalid} invalid entries):")
+    for k in library_service_backends.keys():
+        print(f"... {k} ---> {library_service_backends[k]}")
 
 if __name__ == '__main__':
-    # init default values
+    # default values for command line args
     discover = ""
     input_filename = ""
     libservice = ""
@@ -532,12 +600,17 @@ if __name__ == '__main__':
     if args.output:
         output_filename = args.output[0]
 
+    # load config file
+    load_config()
+
     # discover-mode takes priority
     if discover:
-        site_engines = [CapitaEngine(),
-                        PrismEngine(),
-                        LLCSirsidynixEngine()]
-        discover_catalogue(discover, site_engines)
+        site_backends = [PrismBackend(),
+                         LLCSirsidynixBackend()]
+        if input_filename:
+            discover_catalogue_from_file(input_filename, site_backends)
+        else:
+            discover_catalogue(discover, site_backends)
 
     else:
 

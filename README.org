@@ -5,8 +5,12 @@
 Get search information from UK public library service catalogue websites by
 web-scraping with BeautifulSoup.
 
-Currently only supports websites based on /prism.librarymanagementcloud.co.uk/. I
-plan to also support /capitadiscovery/ and /sirsidynix/.
+Currently only supports websites based on /prism.librarymanagementcloud.co.uk/.
+
+I plan to add support for more library service backends, including:
+- sirsidynix
+- spydus
+- librarieswest (consortium of 150+ libraries in the west of England)
 
 A public librarian who I know compiled a series of lists of children's books on
 different themes as an aid to library users. Every book has been carefully
@@ -102,6 +106,36 @@ T=diary of a nobody
 A=bukowski
 T=factotum
 #+END_SRC
+
+* Which Public Library Authorities Will This Work With (updated August 2022)
+** Config File
+
+See the config file:
+
+: .plscrape
+
+This file consists of a series of lines, each specifying which backend to use for
+one library service. The format is like this:
+
+: barking-and-dagenham, llc.ent.sirsidynix.net.uk
+
+Anything following the hash symbol is a comment:
+
+: bathnes, librarieswest # Bath and NE Somerset
+
+** Discover Which Backend a Library Service Uses
+
+This will try all available backends with the library service "islington", and
+print the results:
+
+: python plscrape.py -d islington
+
+This will do the same for a file containing a list of library services. The
+resulting list is printed in a format which can be directly copied and pasted
+into a config file:
+
+: python plscrape.py -d -f list_of_library_services
+
 * Dependencies
 - Python 3
 - requests
