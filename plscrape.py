@@ -111,51 +111,33 @@ class SearchResultItem(object):
     """A search results item."""
 
     def __init__(self):
-        self.item_id = 'default'
-        self.title = 'default'
-        self.publisher = 'default'
-        self.link = 'default'
-        self.summary = 'default'
-        self.available_at = 'default'
+        self.item_id = '?' # i.e. bib record number
+        self.link = '?'
+        self.title = '?'
+        self.publisher = '?'
+        self.publication_date = '?'
+        self.item_type = '?'
+        self.summary = '?'
+        self.available_at = '?'
         self.branches = []
 
     def add_branch_result(self, bri):
-        "bri = a BranchResultItem"
+        """bri = a BranchResultItem"""
         self.branches.append(bri)
 
     def to_string(self):
         s = StringIO()
         s.write('ID:        {}\n'.format(self.item_id))
         s.write('TITLE:     {}\n'.format(self.title))
+        s.write(f'TYPE: {self.item_type}\n')
         s.write('PUBLISHER: {}\n'.format(self.publisher))
+        s.write(f'DATE: {self.publication_date}\n')
         s.write('LINK:      {}\n'.format(self.link))
         s.write('SUMMARY:   {}\n'.format(self.summary))
         s.write('AVAILABLE: {}\n'.format(self.available_at))
         for b in self.branches:
             s.write(b.to_string())
         return s.getvalue()
-
-def init_backend(backend_id):
-    global backends_dict
-    if backend_id == backend_id_prism:
-        backends_dict[backend_id] = PrismBackend()
-    elif backend_id == backend_id_llc_sirsidynix:
-        backends_dict[backend_id] = LLCSirsidynixBackend()
-
-def get_backend(libservice):
-    global backends_dict
-    global library_service_backends
-    global config_filename
-    if libservice in library_service_backends:
-        b = library_service_backends[libservice]
-        if b in backends_dict:
-            return backends_dict[b]
-        else:
-            init_backend(b)
-            return backends_dict[b]
-    else:
-        log_error(f'ERROR: library service "{libservice}" needs to be configured in {config_filename}')
-        exit(1)
 
 class PLSearch(object):
     """Get search results from Library Catalogue website."""
@@ -343,6 +325,98 @@ class LLCSirsidynixBackend(object):
     def get_catalogue_url(self, libservice):
         return self.sirsidynix_url + libservice + '/'
 
+    def build_search_url(self, catalogue_url, title='', author=''):
+        """
+https://llc.ent.sirsidynix.net.uk/client/en_GB/brent/search/results?qu=&qu=TITLE%3Dlullaby+&qu=AUTHOR%3Dslimani+&h=1
+"""
+        global match_exact
+        title_str = ''
+        author_str = ''
+        if title:
+            if match_exact:
+                # use quote marks around the title (%22)
+                title_str = '&qu=TITLE%3D%22' + title.replace(' ', '+') + '%22'
+            else:
+                title_str = '&qu=TITLE%3D' + title.replace(' ', '+')
+        if author:
+            author_str = '&quAUTHOR%3D' + author.replace(' ', '+')
+        url = catalogue_url + 'search/results?qu=' + title_str
+        if author_str:
+            url += '+' + author_str
+        url += '+&h=1'
+        return url
+
+    def get_search_results(self, html):
+        items_found = []
+        count = 0
+        for search_results_wrapper in html.select('div#results_wrapper'):
+            for record in search_results_wrapper.select('div.results_cell'):
+                count += 1
+                print(f"\nNEXT ITEM ({count}):")
+                item = SearchResultItem()
+
+                # id
+
+                
+                # title
+                div_detail = record.select('div.displayDetailLink')
+                if div_detail:
+                    a_detail = div_detail[0].select('a')
+                    if a_detail:
+                        item.title = a_detail[0].text
+                
+                
+                # publisher
+                
+                # date
+                item.publication_date = self.span_div_div_text(record, 'PUBDATE')
+
+                # span_date = record.select('span.PUBDATE')
+                # if span_date:
+                #     div_date_1 = span_date[0].select('div.PUBDATE')
+                #     if div_date_1:
+                #         div_date_2 = div_date_1[0].select('div.PUBDATE')
+                #         if div_date_2:
+                #             item.publication_date = div_date_2[1].text
+                        
+
+                # # link
+                # div_link = record.select('div.displayDetailLink')
+                # if div_link:
+                    
+                
+                # summary
+                # available at
+                item.available_at = self.span_div_div_text(record, 'PARENT_AVAILABLE')
+                
+                
+                # branches
+
+                # author
+                
+                # format
+                span_format = record.select('span.formatText')
+                if span_format:
+                    item.item_type = span_format[0].text
+                
+                # isbn
+                
+                items_found.append(item)
+        return items_found
+
+    def span_div_div_text(self, html, classname):
+        val = '???'
+        span = html.select('span.' + classname)
+        if span:
+            div1 = span[0].select('div.' + classname)
+            if div1:
+                div2 = div1[0].select('div.' + classname)
+                if div2:
+                    val = div2[1].text
+        return val
+        
+
+
 def show_search(search):
     """Prints summary of a search to standard output.
 
@@ -364,6 +438,28 @@ Arguments:
     if search.error_messages:
         for msg in search.error_messages:
             print(f'ERROR: {msg}\n')
+
+def init_backend(backend_id):
+    global backends_dict
+    if backend_id == backend_id_prism:
+        backends_dict[backend_id] = PrismBackend()
+    elif backend_id == backend_id_llc_sirsidynix:
+        backends_dict[backend_id] = LLCSirsidynixBackend()
+
+def get_backend(libservice):
+    global backends_dict
+    global library_service_backends
+    global config_filename
+    if libservice in library_service_backends:
+        b = library_service_backends[libservice]
+        if b in backends_dict:
+            return backends_dict[b]
+        else:
+            init_backend(b)
+            return backends_dict[b]
+    else:
+        log_error(f'ERROR: backend for library service "{libservice}" needs to be specified in config file.')
+        exit(1)
 
 def do_search(libservice, title, author):
     print(f'\nSEARCHING: library-service="{libservice}", title="{title}", author="{author}"\n')
@@ -458,7 +554,7 @@ Arguments:
             if len(search.items_found) > 0:
                 f.write("<ol>")
                 for item in search.items_found:
-                    f.write(f'<li><b>{item.title}</b>, {item.available_at}')
+                    f.write(f'<li><b>{item.title}</b>, {item.publication_date}, {item.available_at}')
                     if len(item.branches) > 0:
                         f.write("<ul>")
                         for branch_item in item.branches:
@@ -537,13 +633,12 @@ def discover_catalogue_from_file(filename, site_backends):
     for r in results:
         print(r)
 
-def load_config():
-    global config_filename
+def load_config(filename):
     global library_service_backends
-    print(f"loading config from file: {config_filename}")
+    print(f"loading config from file: {filename}")
     count = 0
     num_invalid = 0
-    with open(config_filename, 'r') as f:
+    with open(filename, 'r') as f:
         for line in f:
             line = line.strip().lower()
             # ignore empty lines and comments
@@ -570,6 +665,7 @@ def load_config():
         print(f"... {k} ---> {library_service_backends[k]}")
 
 if __name__ == '__main__':
+    #global config_filename
     # default values for command line args
     discover = ""
     input_filename = ""
@@ -601,7 +697,8 @@ if __name__ == '__main__':
         output_filename = args.output[0]
 
     # load config file
-    load_config()
+    # note 'global' not required in main to access global variable 'config_filename'
+    load_config(config_filename)
 
     # discover-mode takes priority
     if discover:
